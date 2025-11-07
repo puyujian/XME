@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"os"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -190,6 +190,20 @@ func (s *AppServer) processToolsList(request *JSONRPCRequest) *JSONRPCResponse {
 					"images": map[string]interface{}{
 						"type":        "array",
 						"description": "图片路径列表（发布图文时使用）",
+						"items": map[string]interface{}{
+							"type": "string",
+						},
+					},
+					"tags": map[string]interface{}{
+						"type":        "array",
+						"description": "标签列表（可选）",
+						"items": map[string]interface{}{
+							"type": "string",
+						},
+					},
+					"products": map[string]interface{}{
+						"type":        "array",
+						"description": "商品名称列表（可选参数），如 [正宗特级湘西莓茶, 儿时麦芽糖]。系统会从商品列表中模糊匹配并添加商品，最多18个",
 						"items": map[string]interface{}{
 							"type": "string",
 						},
