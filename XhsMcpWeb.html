@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MCP 中文调试面板</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#12b47b;--muted:#9aa5b1}
+    *{box-sizing:border-box} body{margin:0;background:#0b1220;color:#e6eef3;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Noto Sans CJK SC',Arial}
+    .wrap{max-width:1100px;margin:24px auto;padding:20px}
+    h1{margin:0 0 12px 0;font-size:20px}
+    .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:14px;margin:12px 0}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input,textarea,select{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:#0a0f1a;color:#e6eef3}
+    textarea{min-height:120px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    button{background:var(--accent);border:none;color:#042021;font-weight:700;padding:10px 14px;border-radius:10px;cursor:pointer}
+    .ghost{background:transparent;color:#cfe9df;border:1px solid rgba(255,255,255,0.12)}
+    pre{white-space:pre-wrap;background:#0a0f1a;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px;overflow:auto}
+    .tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+    .tool{border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px;background:rgba(255,255,255,0.03)}
+    small{color:var(--muted)}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media (max-width:1000px){.split{grid-template-columns:1fr}}
+    .inline{display:flex;gap:10px;align-items:center}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>MCP 中文调试面板</h1>
+    <div class="card">
+      <div class="row3">
+        <div>
+          <label>服务器地址（HTTP MCP）</label>
+          <input id="server" value="http://localhost:18060/mcp" />
+        </div>
+        <div>
+          <label>选择会话（自动加载 ./cookies/*.json）</label>
+          <select id="sessionSelect"><option value="">（未选择）</option></select>
+        </div>
+        <div>
+          <label>自定义 Session ID（可选，优先级低于下拉）</label>
+          <input id="session" placeholder="用于区分会话，可留空" />
+        </div>
+      </div>
+      <div class="inline" style="margin-top:8px">
+        <input type="checkbox" id="headless" checked /> <label for="headless" style="margin:0">无头模式（勾选=无头，不勾选=有界面）</label>
+      </div>
+      <div class="btns">
+        <button id="btnLoadSessions" class="ghost">加载会话列表</button>
+        <button id="btnInit">初始化 initialize</button>
+        <button id="btnList" class="ghost">列出工具 tools/list</button>
+        <button id="btnPing" class="ghost">Ping</button>
+        <button id="btnSSE" class="ghost">连接SSE（可选）</button>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="card">
+        <label>请求结果</label>
+        <pre id="out">等待操作…</pre>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 8px 0">REST 快捷操作</h3>
+        <div class="btns">
+          <button id="restStatus">检查登录状态（GET /api/v1/login/status）</button>
+          <button id="restSessions" class="ghost">列会话（GET /api/v1/sessions）</button>
+          <button id="restFeeds" class="ghost">我的列表（GET /api/v1/feeds/list）</button>
+        </div>
+        <div class="row">
+          <div>
+            <label>搜索关键词</label>
+            <input id="restKeyword" placeholder="如：旅行" />
+          </div>
+          <div style="display:flex;align-items:flex-end">
+            <button id="restSearch" class="ghost">搜索（GET /api/v1/feeds/search）</button>
+          </div>
+        </div>
+        <div style="height:10px"></div>
+        <h4 style="margin:8px 0">发布（POST /api/v1/publish）</h4>
+        <div class="row">
+          <div><label>标题</label><input id="pubTitle" placeholder="不超过20字" /></div>
+          <div><label>正文</label><input id="pubContent" placeholder="内容描述" /></div>
+        </div>
+        <div class="row">
+          <div><label>图片（逗号分隔的 URL 或本地路径）</label><input id="pubImages" placeholder="http://..., ./a.jpg, ..." /></div>
+          <div style="display:flex;align-items:flex-end"><button id="restPublish">发布</button></div>
+        </div>
+        <div class="row">
+          <div>
+            <label>选择文件夹（浏览器仅提供相对路径）</label>
+            <input id="folderPicker" type="file" webkitdirectory directory multiple />
+          </div>
+          <div>
+            <label>本地前缀目录（用于拼接绝对/相对路径）</label>
+            <input id="pathPrefix" placeholder="例如：D:\\images 或 /Users/me/Pictures" />
+          </div>
+        </div>
+        <div class="btns">
+          <button id="btnBuildImages" class="ghost">用选中文件生成图片列表</button>
+        </div>
+        <small>说明：浏览器不会暴露真实本地绝对路径。选择文件夹后，我会读取相对路径（webkitRelativePath），用你填的“本地前缀目录”拼接成可供服务读取的本地路径，并填入“图片”输入框。</small>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px 0">MCP JSON-RPC</h3>
+      <div class="row">
+        <div>
+          <label>工具名称</label>
+          <input id="toolName" placeholder="例如：check_login_status" />
+        </div>
+        <div>
+          <label>请求 ID（任意数字）</label>
+          <input id="reqId" type="number" value="100" />
+        </div>
+      </div>
+      <label style="margin-top:8px">参数（JSON 对象）</label>
+      <textarea id="toolArgs" placeholder='如需参数：{"name":"publish_content","arguments":{"title":"t","content":"c"}}'></textarea>
+      <div class="btns">
+        <button id="btnCall">调用工具 tools/call</button>
+      </div>
+      <small>说明：若上面“工具名称”填写为空，将从参数 JSON 中读取 <code>name</code> 与 <code>arguments</code>。</small>
+    </div>
+
+    <div class="card">
+      <label>已发现的工具</label>
+      <div id="tools" class="tools"></div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id)=>document.getElementById(id);
+    const out = $("out");
+
+    function getSessionId(){
+      const sel = $("sessionSelect").value.trim();
+      if(sel) return sel;
+      return $("session").value.trim();
+    }
+
+    function getHeadless(){ return $("headless").checked ? 'true' : 'false'; }
+
+    function headers(json=true){
+      const h = json? {"Content-Type":"application/json"} : {};
+      const sid = getSessionId();
+      if(sid) h["Mcp-Session-Id"]=sid;
+      h["Mcp-Headless"] = getHeadless();
+      return h;
+    }
+
+    async function post(method, id, params){
+      const url = $("server").value.trim();
+      const body = { jsonrpc:"2.0", method, id };
+      if(params!==undefined) body.params = params;
+      const res = await fetch(url, { method:"POST", headers:headers(true), body: JSON.stringify(body) });
+      return await res.json();
+    }
+
+    function show(data){ out.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2); }
+
+    async function loadSessions(){
+      try{
+        const base = new URL($("server").value.trim());
+        base.pathname = "/api/v1/sessions";
+        const res = await fetch(base.href);
+        const data = await res.json();
+        const sel = $("sessionSelect");
+        sel.innerHTML = '<option value="">（未选择）</option>';
+        (data?.data?.sessions||[]).forEach(s=>{
+          const opt = document.createElement('option');
+          opt.value = s; opt.textContent = s; sel.appendChild(opt);
+        });
+        show(data);
+      }catch(e){ show({error:String(e)}) }
+    }
+
+    $("btnLoadSessions").onclick = loadSessions;
+
+    $("btnInit").onclick = async()=>{
+      try{ show(await post("initialize", 1, {})); }catch(e){ show({error:String(e)}) }
+    }
+    $("btnList").onclick = async()=>{
+      try{
+        const data = await post("tools/list", 2, {});
+        show(data);
+        const tools = (data?.result?.tools)||[];
+        const box = $("tools"); box.innerHTML = "";
+        tools.forEach(t=>{
+          const div = document.createElement('div');
+          div.className='tool';
+          div.innerHTML = `<strong>${t.name}</strong><br><small>${t.description||''}</small>`;
+          div.onclick = ()=>{ $("toolName").value = t.name; };
+          box.appendChild(div);
+        });
+      }catch(e){ show({error:String(e)}) }
+    }
+    $("btnPing").onclick = async()=>{
+      try{ show(await post("ping", 3, {})); }catch(e){ show({error:String(e)}) }
+    }
+    $("btnCall").onclick = async()=>{
+      try{
+        const id = Number($("reqId").value)||100;
+        const nameFromInput = $("toolName").value.trim();
+        let argsText = $("toolArgs").value.trim();
+        let params;
+        if(argsText){
+          try{ params = JSON.parse(argsText); }catch{ return show({error:"参数JSON解析失败"}); }
+        }
+        // 如果未填工具名，则从 JSON 中读取 {name, arguments}
+        let finalParams;
+        if(nameFromInput){
+          finalParams = { name: nameFromInput, arguments: (params && params.arguments) || {} };
+        }else{
+          if(!params || !params.name) return show({error:"请填写工具名称或在参数中提供 name"});
+          finalParams = params;
+        }
+        show(await post("tools/call", id, finalParams));
+      }catch(e){ show({error:String(e)}) }
+    }
+    $("btnSSE").onclick = ()=>{
+      try{
+        const url = $("server").value.trim();
+        const query = new URL(url);
+        const es = new EventSource(query.href, { withCredentials:false });
+        es.onopen = ()=> show({sse:"connected"});
+        es.onmessage = (e)=> show({sse:"message", data:e.data});
+        es.onerror = (e)=> show({sse:"error"});
+      }catch(e){ show({error:String(e)}) }
+    }
+
+    // REST helpers
+    async function restGet(path, params={}){
+      const url = new URL($("server").value.trim());
+      url.pathname = path;
+      Object.entries(params).forEach(([k,v])=>{ if(v!==undefined && v!=='') url.searchParams.set(k,v); });
+      const res = await fetch(url.href, { headers: headers(false) });
+      return await res.json();
+    }
+    async function restPost(path, body){
+      const url = new URL($("server").value.trim());
+      url.pathname = path;
+      const res = await fetch(url.href, { method:'POST', headers: headers(true), body: JSON.stringify(body||{}) });
+      return await res.json();
+    }
+
+    $("restStatus").onclick = async()=>{ try{ show(await restGet('/api/v1/login/status')); }catch(e){ show({error:String(e)}) } }
+    $("restSessions").onclick = async()=>{ try{ show(await restGet('/api/v1/sessions')); }catch(e){ show({error:String(e)}) } }
+    $("restFeeds").onclick = async()=>{ try{ show(await restGet('/api/v1/feeds/list')); }catch(e){ show({error:String(e)}) } }
+    $("restSearch").onclick = async()=>{ try{ show(await restGet('/api/v1/feeds/search', { keyword: $("restKeyword").value.trim() })); }catch(e){ show({error:String(e)}) } }
+    $("restPublish").onclick = async()=>{
+      try{
+        const images = $("pubImages").value.split(',').map(s=>s.trim()).filter(Boolean);
+        const body = { title: $("pubTitle").value.trim(), content: $("pubContent").value.trim(), images };
+        show(await restPost('/api/v1/publish', body));
+      }catch(e){ show({error:String(e)}) }
+    }
+
+    $("btnBuildImages").onclick = ()=>{
+      try{
+        const files = $("folderPicker").files;
+        const prefix = $("pathPrefix").value.trim();
+        if(!files || files.length===0){ return show({error:"请先选择文件夹"}); }
+        const paths = [];
+        for(const f of files){
+          // 使用 webkitRelativePath 保留子目录结构
+          let rel = f.webkitRelativePath || f.name;
+          
+          // 统一路径分隔符：如果前缀使用反斜杠，则将相对路径也转换为反斜杠
+          if(prefix.includes('\\')) {
+            rel = rel.replace(/\//g, '\\');
+          }
+          
+          // 构建完整路径
+          let full;
+          if(prefix) {
+            // 如果前缀以分隔符结尾，直接拼接
+            const separator = prefix.includes('\\') ? '\\' : '/';
+            if(prefix.endsWith(separator)) {
+              full = prefix + rel;
+            } else {
+              full = prefix + separator + rel;
+            }
+          } else {
+            full = rel;
+          }
+          
+          paths.push(full);
+        }
+        $("pubImages").value = paths.join(', ');
+        show({generated: paths.length, sample: paths.slice(0,5)});
+      }catch(e){ show({error:String(e)}) }
+    }
+
+    // 初始尝试加载一次会话列表
+    loadSessions();
+  </script>
+</body>
+</html>
+
+
