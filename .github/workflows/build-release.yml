@@ -1,0 +1,79 @@
+name: Build and Release Windows Package
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      GOOS: windows
+      GOARCH: amd64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build backend executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          go build -ldflags "-s -w" -o dist/xiaohongshu-mcp.exe .
+          New-Item -ItemType Directory -Path Eapp/backend -Force | Out-Null
+          Copy-Item dist/xiaohongshu-mcp.exe Eapp/backend/xiaohongshu-mcp.exe -Force
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: Eapp/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: Eapp
+        run: npm ci
+
+      - name: Build Windows package
+        working-directory: Eapp
+        run: npm run build:win -- --publish=never
+
+      - name: Locate portable executable
+        id: locate_exe
+        shell: pwsh
+        run: |
+          $artifact = Get-ChildItem -Path Eapp/build -Filter *.exe | Select-Object -First 1
+          if (-not $artifact) {
+            throw "未能在 Eapp/build 目录找到生成的 exe 文件"
+          }
+          Write-Host "Found executable: $($artifact.FullName)"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "artifact_path=$($artifact.FullName)"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "artifact_name=$($artifact.Name)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: ${{ steps.locate_exe.outputs.artifact_path }}
+
+      - name: Create release and upload asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_id }}
+          name: Automated build ${{ github.run_number }}
+          body: |
+            Automated build for commit ${{ github.sha }}.
+            Generated executable: ${{ steps.locate_exe.outputs.artifact_name }}
+          draft: false
+          prerelease: true
+          files: ${{ steps.locate_exe.outputs.artifact_path }}
