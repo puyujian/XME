@@ -15,6 +15,8 @@ import (
 type PublishImageContent struct {
 	Title      string
 	Content    string
+	Tags       []string
+	Products   []string
 	ImagePaths []string
 }
 
@@ -37,11 +39,11 @@ func NewPublishImageAction(page *rod.Page) (*PublishAction, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "找不到上传内容区域，可能需要重新登录")
 	}
-	
+
 	if err := uploadContent.WaitVisible(); err != nil {
 		return nil, errors.Wrap(err, "上传内容区域未显示，页面可能未完全加载")
 	}
-	
+
 	slog.Info("wait for upload-content visible success")
 
 	// 等待一段时间确保页面完全加载
@@ -79,6 +81,13 @@ func (p *PublishAction) Publish(ctx context.Context, content PublishImageContent
 	if len(content.ImagePaths) > 0 {
 		if err := uploadImages(page, content.ImagePaths); err != nil {
 			return errors.Wrap(err, "小红书上传图片失败")
+		}
+	}
+
+	// 如果有商品，添加商品
+	if len(content.Products) > 0 {
+		if err := addProducts(page, content.Products); err != nil {
+			return errors.Wrap(err, "添加商品失败")
 		}
 	}
 

@@ -51,11 +51,11 @@ func setSessionFromRequest(c *gin.Context) {
 	if sid := c.Query("session_id"); sid != "" {
 		_ = os.Setenv("MCP_SESSION_ID", sid)
 	}
-	
+
 	// 处理无头模式设置
 	if hv := c.GetHeader("Mcp-Headless"); hv != "" {
 		_ = os.Setenv("MCP_HEADLESS", hv)
-		
+
 		// 同时更新浏览器管理器的设置
 		if b, err := parseBool(hv); err == nil {
 			manager := browser.GetManager()
@@ -90,8 +90,8 @@ func (s *AppServer) publishHandler(c *gin.Context) {
 		return
 	}
 
-	logrus.Infof("收到发布请求: 标题=%s, 内容长度=%d, 图片数量=%d", 
-		req.Title, len(req.Content), len(req.Images))
+	logrus.Infof("收到发布请求: 标题=%s, 内容长度=%d, 图片数量=%d, 标签数量=%d, 商品数量=%d",
+		req.Title, len(req.Content), len(req.Images), len(req.Tags), len(req.Products))
 
 	// 执行发布
 	result, err := s.xiaohongshuService.PublishContent(c.Request.Context(), &req)
@@ -165,11 +165,11 @@ func (s *AppServer) loginHandler(c *gin.Context) {
 		// 如果没有JSON数据，使用默认值
 		req.SessionName = ""
 	}
-	
+
 	// 异步执行登录流程
 	go func() {
 		logrus.Infof("开始执行自动登录，Session名称: %s", req.SessionName)
-		
+
 		// 直接调用登录逻辑
 		if err := s.performLogin(req.SessionName); err != nil {
 			logrus.Errorf("登录失败: %v", err)
@@ -177,10 +177,10 @@ func (s *AppServer) loginHandler(c *gin.Context) {
 			logrus.Info("登录成功")
 		}
 	}()
-	
+
 	respondSuccess(c, map[string]interface{}{
-		"message": "登录流程已启动，请等待浏览器自动打开登录页面",
-		"status":  "started",
+		"message":      "登录流程已启动，请等待浏览器自动打开登录页面",
+		"status":       "started",
 		"session_name": req.SessionName,
 	}, "登录流程已启动")
 }
@@ -189,7 +189,7 @@ func (s *AppServer) loginHandler(c *gin.Context) {
 func (s *AppServer) performLogin(sessionName string) error {
 	// 关闭 go-rod 的 leakless，避免被 Windows Defender 误杀
 	os.Setenv("ROD_LAUNCH_LEAKLESS", "0")
-	
+
 	// 创建浏览器实例（非无头模式，用于登录）
 	b := browser.NewBrowser(false)
 	defer b.Close()
@@ -264,7 +264,7 @@ func (s *AppServer) saveCookies(page *rod.Page, sessionName string) error {
 		// 自动生成session名称
 		path = cookies.GetCookiePathForSaving()
 	}
-	
+
 	logrus.Infof("保存cookies到: %s", path)
 	cookieLoader := cookies.NewLoadCookie(path)
 	return cookieLoader.SaveCookies(data)
@@ -283,13 +283,13 @@ func (s *AppServer) listSessionsHandler(c *gin.Context) {
 // browserStatusHandler 获取浏览器状态
 func (s *AppServer) browserStatusHandler(c *gin.Context) {
 	manager := browser.GetManager()
-	
+
 	status := map[string]interface{}{
-		"headless_mode": manager.IsHeadless(),
-		"session_count": manager.GetSessionCount(),
+		"headless_mode":   manager.IsHeadless(),
+		"session_count":   manager.GetSessionCount(),
 		"active_sessions": []string{}, // 可以扩展显示活跃会话列表
 	}
-	
+
 	respondSuccess(c, status, "浏览器状态获取成功")
 }
 
@@ -298,20 +298,20 @@ func (s *AppServer) closeBrowserHandler(c *gin.Context) {
 	var req struct {
 		SessionID string `json:"session_id"`
 	}
-	
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "无效的请求参数", err.Error())
 		return
 	}
-	
+
 	if req.SessionID == "" {
 		respondError(c, http.StatusBadRequest, "MISSING_SESSION_ID", "缺少会话ID", nil)
 		return
 	}
-	
+
 	manager := browser.GetManager()
 	manager.CloseBrowser(req.SessionID)
-	
+
 	respondSuccess(c, map[string]string{"session_id": req.SessionID}, "浏览器已关闭")
 }
 
@@ -319,7 +319,7 @@ func (s *AppServer) closeBrowserHandler(c *gin.Context) {
 func (s *AppServer) closeAllBrowsersHandler(c *gin.Context) {
 	manager := browser.GetManager()
 	manager.CloseAll()
-	
+
 	respondSuccess(c, map[string]int{"closed_count": manager.GetSessionCount()}, "所有浏览器已关闭")
 }
 

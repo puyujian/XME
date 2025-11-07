@@ -22,9 +22,11 @@ func NewXiaohongshuService() *XiaohongshuService {
 
 // PublishRequest 发布请求
 type PublishRequest struct {
-	Title   string   `json:"title" binding:"required"`
-	Content string   `json:"content" binding:"required"`
-	Images  []string `json:"images"`
+	Title    string   `json:"title" binding:"required"`
+	Content  string   `json:"content" binding:"required"`
+	Images   []string `json:"images"`
+	Tags     []string `json:"tags,omitempty"`
+	Products []string `json:"products,omitempty"`
 }
 
 // LoginStatusResponse 登录状态响应
@@ -73,89 +75,59 @@ func (s *XiaohongshuService) CheckLoginStatus(ctx context.Context) (*LoginStatus
 
 // PublishContent 发布内容
 func (s *XiaohongshuService) PublishContent(ctx context.Context, req *PublishRequest) (*PublishResponse, error) {
-	logrus.Infof("开始处理发布请求: 标题=%s, 图片数量=%d", req.Title, len(req.Images))
-	
-	// 检查是否有图片
+	logrus.Infof("开始处理发布请求: 标题=%s, 图片数量=%d, 标签数量=%d, 商品数量=%d", req.Title, len(req.Images), len(req.Tags), len(req.Products))
+
+	var imagePaths []string
+
 	if len(req.Images) == 0 {
-		logrus.Warn("没有提供图片，将发布纯文本内容")
-		return &PublishResponse{
-			Title:   req.Title,
-			Content: req.Content,
-			Images:  0,
-			Status:  "发布完成（纯文本）",
-		}, nil
-	}
-	
-	// 检查是否是虚拟图片路径（前端生成的临时路径）
-	virtualImagePaths := make([]string, 0)
-	for _, img := range req.Images {
-		// 检测各种虚拟路径模式：
-		// 1. image_xxx_xxx.jpg 格式
-		// 2. 简单的文件名如 "通知.jpg" 但没有对应的本地文件
-		// 3. 其他明显不是真实文件路径的格式
-		isVirtual := false
-		
-		// 模式1: image_xxx_xxx.jpg
-		if strings.HasPrefix(img, "image_") && strings.Contains(img, "_") {
-			isVirtual = true
-		}
-		
-		// 模式2: 检查是否是简单的文件名（不包含路径分隔符）
-		if !isVirtual && !strings.Contains(img, "/") && !strings.Contains(img, "\\") {
-			// 检查文件是否存在
-			if _, err := os.Stat(img); os.IsNotExist(err) {
+		logrus.Warn("没有提供图片，将尝试发布纯文本内容")
+	} else {
+		// 检查是否是虚拟图片路径（前端生成的临时路径）
+		virtualImagePaths := make([]string, 0, len(req.Images))
+		for _, img := range req.Images {
+			isVirtual := false
+
+			// 模式1: image_xxx_xxx.jpg
+			if strings.HasPrefix(img, "image_") && strings.Contains(img, "_") {
 				isVirtual = true
 			}
-		}
-		
-		// 模式3: 检查是否是URL（以http开头）
-		if !isVirtual && (strings.HasPrefix(img, "http://") || strings.HasPrefix(img, "https://")) {
-			isVirtual = false // URL不是虚拟路径
-		}
-		
-		if isVirtual {
-			virtualImagePaths = append(virtualImagePaths, img)
-		}
-	}
-	
-	// 如果都是虚拟路径，说明前端没有提供真实图片，发布纯文本
-	if len(virtualImagePaths) == len(req.Images) {
-		logrus.Warnf("检测到虚拟图片路径: %v，将发布纯文本内容", virtualImagePaths)
-		
-		// 构建纯文本发布内容
-		content := xiaohongshu.PublishImageContent{
-			Title:      req.Title,
-			Content:    req.Content,
-			ImagePaths: []string{}, // 空图片数组表示纯文本
+
+			// 模式2: 检查是否是简单的文件名（不包含路径分隔符）
+			if !isVirtual && !strings.Contains(img, "/") && !strings.Contains(img, "\\") {
+				if _, err := os.Stat(img); os.IsNotExist(err) {
+					isVirtual = true
+				}
+			}
+
+			// 模式3: 检查是否是URL（以http开头）
+			if !isVirtual && (strings.HasPrefix(img, "http://") || strings.HasPrefix(img, "https://")) {
+				isVirtual = false // URL不是虚拟路径
+			}
+
+			if isVirtual {
+				virtualImagePaths = append(virtualImagePaths, img)
+			}
 		}
 
-		// 执行纯文本发布
-		if err := s.publishContent(ctx, content); err != nil {
-			logrus.Errorf("纯文本发布失败: %v", err)
-			return nil, err
+		if len(virtualImagePaths) == len(req.Images) {
+			logrus.Warnf("检测到虚拟图片路径: %v，将发布纯文本内容", virtualImagePaths)
+		} else {
+			processed, err := s.processImages(req.Images)
+			if err != nil {
+				logrus.Errorf("图片处理失败: %v", err)
+				return nil, err
+			}
+			imagePaths = processed
+			logrus.Infof("图片处理完成，有效图片数量: %d", len(imagePaths))
 		}
-
-		return &PublishResponse{
-			Title:   req.Title,
-			Content: req.Content,
-			Images:  0,
-			Status:  "发布完成（纯文本）",
-		}, nil
 	}
-	
-	// 处理图片：下载URL图片或使用本地路径
-	imagePaths, err := s.processImages(req.Images)
-	if err != nil {
-		logrus.Errorf("图片处理失败: %v", err)
-		return nil, err
-	}
-	
-	logrus.Infof("图片处理完成，有效图片数量: %d", len(imagePaths))
 
 	// 构建发布内容
 	content := xiaohongshu.PublishImageContent{
 		Title:      req.Title,
 		Content:    req.Content,
+		Tags:       req.Tags,
+		Products:   req.Products,
 		ImagePaths: imagePaths,
 	}
 
@@ -165,11 +137,16 @@ func (s *XiaohongshuService) PublishContent(ctx context.Context, req *PublishReq
 		return nil, err
 	}
 
+	status := "发布完成"
+	if len(imagePaths) == 0 {
+		status = "发布完成（纯文本）"
+	}
+
 	response := &PublishResponse{
 		Title:   req.Title,
 		Content: req.Content,
 		Images:  len(imagePaths),
-		Status:  "发布完成",
+		Status:  status,
 	}
 
 	logrus.Infof("发布内容处理完成: %+v", response)
@@ -185,7 +162,7 @@ func (s *XiaohongshuService) processImages(images []string) ([]string, error) {
 // publishContent 执行内容发布
 func (s *XiaohongshuService) publishContent(ctx context.Context, content xiaohongshu.PublishImageContent) error {
 	logrus.Infof("开始执行发布，使用环境变量 MCP_HEADLESS: %s", os.Getenv("MCP_HEADLESS"))
-	
+
 	// 使用浏览器管理器的当前设置
 	manager := browser.GetManager()
 	currentHeadless := manager.IsHeadless()
@@ -207,7 +184,7 @@ func (s *XiaohongshuService) publishContent(ctx context.Context, content xiaohon
 		logrus.Errorf("发布操作失败: %v", err)
 		return err
 	}
-	
+
 	logrus.Info("发布操作完成")
 	return nil
 }
