@@ -51,7 +51,7 @@
     ],
     "win": {
       "target": "portable",
-      "sign": false
+      "sign": null
     },
     "portable": {
       "artifactName": "小红书管理平台-${version}.exe"
